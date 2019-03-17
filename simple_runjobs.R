@@ -28,7 +28,8 @@ for(i in 1:jobs){
 
 metrics <- mget(paste0(envs)) %>%
   map("metrics") %>%
-  bind_rows
+  bind_rows %>%
+  arrange(logLik)
 
 # Summarize ----
 
