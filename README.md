@@ -2,95 +2,119 @@
 
 *Use this dataset to demonstrate parallel processing with the Launcher and Jobs features*
 
-![](microarray.png)
+![](data/microarray.png)
 
-DNA microarrays are used to measure the expression levels of large numbers of genes simultaneously. These experimental data come from [yeast genome microarrays](https://www.pnas.org/content/pnas/97/7/3364.full.pdf) and can be downloaded [here](http://genome-www.stanford.edu/swisnf/). In this analysis we use a two stage mixed model approach as described in [here](https://pdfs.semanticscholar.org/608a/4dc9f2464942030cb860a84ddcb215691188.pdf?_ga=2.38984291.1957266298.1552698540-1237907384.1552698540). In the first stage, a mixed model normalizes the data. In the second stage, we build independent models for each gene. **We compute approximately 7,000 models in all, one for each gene**.
 
 ## Getting started
 
-Use the code below to build the models and assess the significant interactions. For a full discussion see `full_demo.Rmd`. This code will take about 8 minutes to run on a server.
+**We will compute approximately 7,000 models in all, one for each gene**. Use the `simple_sequential.R` to build and assess the models. For a full discussion see the `reports` folder.
 
-*sequential.R*
+*simple_sequential.R*
 
 ```{r}
 library(dplyr)
-library(lme4)
-library(emmeans)
 library(purrr)
+library(lme4)
+library(DT)
 
 normdat <- readRDS("microarray.rds")
 
 g <- normdat %>% distinct(gene) %>% pull
+n <- length(g)
+n <- 300 # for faster running jobs
 
-# Fit Model
+# Fit Model ----
 
-models <- map(g, ~ try(lmer(resid ~ strain + (1|spot:array), filter(normdat, gene == .x))))
+models <- list()
+for(i in g[1:n]){
+  tryCatch({
+    print(i)
+    models[[i]] <- lmer(resid ~ strain + (1|spot:array), filter(normdat, gene == i), REML = FALSE)},
+    error=function(e) cat("ERROR :",conditionMessage(e), "\n"))
+}
 
-# Pairwise Comparisons
+# Collect Results ----
 
-pairs <- map(models, ~ emmeans(.x, pairwise ~ strain)$contrasts %>%
-               as_tibble %>%
-               mutate(contrast = as.character(contrast)))
+metrics <- map(models, ~ data.frame(logLik = logLik(.x), BIC = BIC(.x), AIC = AIC(.x))) %>%
+  bind_rows(.id = "gene") %>%
+  mutate_if(is.numeric, round, 4) %>%
+  arrange(logLik)
 
-# Collect Results
+# Summarize ----
 
-pvals <- bind_rows(pairs)
+datatable(metrics)
 ```
 
 ## Using jobs
 
-Because these models are independent, you can also parallelize the model fitting with the [Jobs feature](https://blog.rstudio.com/2019/03/14/rstudio-1-2-jobs/) in RStudio v1.2. See `jobs.R` for an example.
+**Use the jobs feature to speed things up**. You can fit the models with multiple [Jobs](https://blog.rstudio.com/2019/03/14/rstudio-1-2-jobs/) in RStudio v1.2. See `simple_runjobs.R` and `simple_job.R` for an example of running three indepedent jobs simultaneously.
 
-*runjobs.R*
+*simple_runjobs.R*
 
 ```{r}
+library(dplyr)
+library(purrr)
+library(lme4)
+library(DT)
 library(rstudioapi)
 
-jobs <- 3
+normdat <- readRDS("data/microarray.rds")
+
+g <- normdat %>% distinct(gene) %>% pull
 n <- length(g)
 n <- 300 # for faster running jobs
 
+jobs <- 3
 inds <- split(1:n, cut(1:n, jobs))
 envs <- paste0("u", 1:jobs)
 
+# Run Jobs ----
+
 for(i in 1:jobs){
   ind <- inds[[i]]
-  jobRunScript("job.R", 
+  jobRunScript("simple_job.R", 
                workingDir = ".", 
                importEnv = TRUE, 
                exportEnv = envs[i])
 }
-```
-
-*job.R*
-
-```{r}
-library(dplyr)
-library(lme4)
-library(emmeans)
-library(purrr)
-
-# Fit Model ----
-
-models <- map(g[ind], ~ tryCatch({
-  print(.x)
-  lmer(resid ~ strain + (1|spot:array), filter(normdat, gene == .x))
-  }, error=function(e) cat("ERROR :",conditionMessage(e), "\n"))
-  )
-
-# Pairwise Comparisons ----
-
-pairs <- map(models, ~ tryCatch({
-  emmeans(.x, pairwise ~ strain)$contrasts %>%
-               as_tibble %>%
-               mutate(contrast = as.character(contrast))
-  }, error=function(e) cat("ERROR :",conditionMessage(e), "\n"))
-  )
 
 # Collect Results ----
 
-pvals <- tryCatch({
-  bind_rows(pairs)
-}, error=function(e) cat("ERROR :",conditionMessage(e), "\n")
-)
+metrics <- mget(paste0(envs)) %>%
+  map("metrics") %>%
+  bind_rows
+
+# Summarize ----
+
+datatable(metrics)
 ```
+
+*simple_job.R*
+
+```{r}
+library(dplyr)
+library(purrr)
+library(lme4)
+
+# Fit Model ----
+
+models <- list()
+for(i in g[ind]){
+  tryCatch({
+    print(i)
+    models[[i]] <- lmer(resid ~ strain + (1|spot:array), filter(normdat, gene == i), REML = FALSE)},
+    error=function(e) cat("ERROR :",conditionMessage(e), "\n"))
+}
+
+# Collect Results ----
+
+metrics <- map(models, ~ data.frame(logLik = logLik(.x), BIC = BIC(.x), AIC = AIC(.x))) %>%
+  bind_rows(.id = "gene") %>%
+  mutate_if(is.numeric, round, 4) %>%
+  arrange(logLik)
+```
+
+## Background
+
+DNA microarrays are used are used to measure the expression levels of large numbers of genes simultaneously. These experimental data come from [yeast genome microarrays](https://www.pnas.org/content/pnas/97/7/3364.full.pdf) and can be downloaded [here](http://genome-www.stanford.edu/swisnf/). Our models borrow from the methodology offered in [Assessing Gene Significance from cDNA Microarray Expression Data via Mixed Models](https://pdfs.semanticscholar.org/608a/4dc9f2464942030cb860a84ddcb215691188.pdf?_ga=2.38984291.1957266298.1552698540-1237907384.1552698540).
+
