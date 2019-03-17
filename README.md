@@ -4,7 +4,7 @@ DNA microarrays are used to measure the expression levels of large numbers of ge
 
 ### Getting started
 
-Use the code below to build the models and assess the significant interactions. For a full discussion see `full_demo.Rmd`.
+Use the code below to build the models and assess the significant interactions. For a full discussion see `full_demo.Rmd`. This code will take about 8 minutes to run on a server.
 
 ```{r}
 library(dplyr)
