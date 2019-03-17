@@ -10,11 +10,11 @@ g <- normdat %>% distinct(gene) %>% pull
 n <- length(g)
 n <- 300 # for faster running jobs
 
+# Run Jobs ----
+
 jobs <- 3
 inds <- split(1:n, cut(1:n, jobs))
 envs <- paste0("u", 1:jobs)
-
-# Run Jobs ----
 
 for(i in 1:jobs){
   ind <- inds[[i]]
