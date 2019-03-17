@@ -47,7 +47,7 @@ datatable(metrics)
 
 ## Using jobs
 
-**Use the jobs feature to speed things up**. You can fit the models with multiple [Jobs](https://blog.rstudio.com/2019/03/14/rstudio-1-2-jobs/) in RStudio v1.2. See `simple_runjobs.R` and `simple_job.R` for an example of running indepedent jobs simultaneously. Notice the jobs are organized into groups. The `inds` and `envs` list objects are used for the indices and environments of each group.
+**Use the jobs feature to speed things up**. You can fit the models with multiple [Jobs](https://blog.rstudio.com/2019/03/14/rstudio-1-2-jobs/) in RStudio v1.2. See `simple_runjobs.R` and `simple_job.R` for an example of running independent jobs simultaneously. Notice the jobs are organized into groups. The `inds` and `envs` list objects are used for the indices and environments of each group.
 
 *simple_runjobs.R*
 
