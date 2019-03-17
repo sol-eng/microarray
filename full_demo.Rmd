@@ -1,0 +1,190 @@
+---
+title: "Microarray Analysis"
+author: "Nathan Stephens"
+output: html_notebook
+---
+
+DNA microarrays are used to measure the expression levels of large numbers of genes simultaneously. These experimental data come from [yeast genome microarrays](https://www.pnas.org/content/pnas/97/7/3364.full.pdf) and can be downloaded [here](http://genome-www.stanford.edu/swisnf/). In this analysis we use a two stage mixed model approach as described in [here](https://pdfs.semanticscholar.org/608a/4dc9f2464942030cb860a84ddcb215691188.pdf?_ga=2.38984291.1957266298.1552698540-1237907384.1552698540). In the first stage, a mixed model normalizes the data. In the second stage, we build independent models for each gene. **We compute approximately 7,000 models in all, one for each gene**.
+
+### Setup
+
+```{r setup, message = TRUE, warning = TRUE}
+library(tidyverse)
+library(lme4)
+library(emmeans)
+```
+
+***
+
+## Data
+
+### Download
+
+Download and organize the data (12 files). 
+
+```{r}
+files <- paste0("http://genome-www.stanford.edu/swisnf/",
+                c("snf2ypda.txt", "snf2ypdc.txt", "snf2ypdd.txt",
+                  "snf2mina.txt", "snf2minc.txt", "snf2mind.txt",
+                  "swi1ypda.txt", "swi1ypdc.txt", "swi1ypdd.txt",
+                  "swi1mina.txt", "swi1minc.txt", "swi1mind.txt")
+                )
+
+rawdat <- files %>%
+  map(read_delim, delim = "\t") %>%
+  map(rowid_to_column, var = "spot") %>%
+  bind_rows(.id = "array") %>%
+  filter(FLAG == 0) %>%
+  mutate(name = ifelse(is.na(NAME), TYPE, NAME),
+         gene = ifelse(is.na(GENE), NAME, GENE),
+         type = TYPE,
+         spot = as.character(spot))
+
+treatment <- rawdat %>%
+  mutate(diff = CH1I - CH1B,
+         strain = case_when(array <=3 ~ "snf2rich",
+                            array <=6 ~ "snf2mini",
+                            array <=9 ~ "swi1rich",
+                            array <=12 ~ "swi1mini"))
+
+control <- rawdat %>%
+  mutate(diff = CH2I - CH2B,
+         strain = "wildtype")
+ 
+moddat <- bind_rows(treatment, control) %>%
+  filter(diff > 0) %>%
+  mutate(logi = log2(diff)) %>%
+  select(array, gene, name, spot, strain, logi) %>%
+  arrange(gene, array, spot, strain)
+```
+
+
+### Normalize
+
+Normalize the data. This takes approximately 10 seconds on Colorado.
+
+```{r}
+m1 <- lmer(logi ~ strain + (1|array/strain), moddat)
+
+normdat <- moddat %>%
+  mutate(resid = resid(m1)) %>%
+  filter(!gene %in% c("EMPTY", "NORF", NA))
+```
+
+***
+
+## Models
+
+The following models are run sequentially.
+
+### Gene Models
+
+There are 7000 genes. These models take approximately 6 minutes to run in series on Colorado.
+
+```{r}
+g <- normdat %>% distinct(gene) %>% pull
+out <- list()
+for (i in g) {
+  d <- filter(normdat, gene == i)
+  k <- tryCatch({
+    print(i)
+    out[[i]] <- lmer(resid ~ strain + (1|spot:array), d) %>%
+      emmeans(pairwise ~ strain) %>%
+      .$contrasts %>%
+      as_tibble() %>%
+      mutate(contrast = as.character(contrast))
+  }, error=function(e) cat("ERROR :",conditionMessage(e), "\n"))
+}
+```
+
+### Results
+
+Identify the significant treatment and gene interactions.
+
+```{r}
+pvals <- bind_rows(out, .id = "gene") %>%
+  drop_na %>%
+  mutate(n=n()) %>%
+  filter(p.value < 0.05 / n) %>%
+  arrange(z.ratio)
+pvals
+```
+
+```{r}
+ggplot(pvals, aes(p.value)) + 
+  geom_density() +
+  ggtitle("Distribution of signifiant p-values")
+```
+
+***
+
+## Jobs
+
+The following models are run using jobs.
+
+### Gene Models (with Jobs)
+
+```{r}
+jobs <- 3
+g <- normdat %>% distinct(gene) %>% pull
+inds <- split(seq_along(g), cut(seq_along(g), jobs))
+envs <- paste0("u", 1:jobs)
+for(i in 1:jobs){
+  ind <- inds[[i]]
+  rstudioapi::jobRunScript("testmicro.R", 
+                           workingDir = "/home/nathan/", 
+                           importEnv = TRUE, 
+                           exportEnv = envs[i])
+}
+```
+
+### Results (from jobs)
+```{r}
+pvals <- mget(paste0(envs)) %>%
+  map("out") %>%
+  map(bind_rows) %>%
+  bind_rows %>%
+  drop_na %>%
+  mutate(n=n()) %>%
+  filter(p.value < 0.05 / n) %>%
+  arrange(z.ratio)
+pvals
+```
+
+```{r}
+ggplot(pvals, aes(p.value)) + 
+  geom_density() +
+  ggtitle("Distribution of signifiant p-values")
+```
+
+### Job script ("testmicro.R")
+
+```
+library(tidyverse)
+library(lme4)
+library(emmeans)
+
+out <- list()
+for (i in g[ind]) {
+  d <- filter(normdat, gene == i)
+  k <- tryCatch({
+    print(i)
+    out[[i]] <- lmer(resid ~ strain + (1|spot:array), d) %>%
+      emmeans(pairwise ~ strain) %>%
+      .$contrasts %>%
+      as_tibble() %>%
+      mutate(contrast = as.character(contrast))
+  }, error=function(e) cat("ERROR :",conditionMessage(e), "\n"))
+}
+```
+
+***
+
+## References
+
+* [Download data](http://genome-www.stanford.edu/swisnf/)
+* [Data explanation](https://www.pnas.org/content/pnas/97/7/3364.full.pdf)
+* [Wolfinger et al](https://pdfs.semanticscholar.org/608a/4dc9f2464942030cb860a84ddcb215691188.pdf?_ga=2.38984291.1957266298.1552698540-1237907384.1552698540)
+* [Y Liu](http://dl.uncw.edu/Etd/2004/liuy/yuanliu.pdf)
+* [N Stephens](https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=2114&context=etd)
+
