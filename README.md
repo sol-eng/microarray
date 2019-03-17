@@ -10,21 +10,29 @@ DNA microarrays are used to measure the expression levels of large numbers of ge
 
 Use the code below to build the models and assess the significant interactions. For a full discussion see `full_demo.Rmd`. This code will take about 8 minutes to run on a server.
 
+*sequential.R*
+
 ```{r}
 library(dplyr)
 library(lme4)
-library(purrr)
 library(emmeans)
+library(purrr)
 
-dat <- readRDS("microarray.rds")
+normdat <- readRDS("microarray.rds")
 
-g <- dat %>% distinct(gene) %>% pull
+g <- normdat %>% distinct(gene) %>% pull
 
-models <- map(g, ~ try(lmer(resid ~ strain + (1|spot:array), filter(dat, gene == .x))))
+# Fit Model
+
+models <- map(g, ~ try(lmer(resid ~ strain + (1|spot:array), filter(normdat, gene == .x))))
+
+# Pairwise Comparisons
 
 pairs <- map(models, ~ emmeans(.x, pairwise ~ strain)$contrasts %>%
                as_tibble %>%
                mutate(contrast = as.character(contrast)))
+
+# Collect Results
 
 pvals <- bind_rows(pairs)
 ```
@@ -32,6 +40,8 @@ pvals <- bind_rows(pairs)
 ### Jobs
 
 Because these models are independent, you can also parallelize the model fitting with the [Jobs feature](https://blog.rstudio.com/2019/03/14/rstudio-1-2-jobs/) in RStudio v1.2. See `jobs.R` for an example.
+
+*runjobs.R*
 
 ```{r}
 library(rstudioapi)
@@ -45,9 +55,42 @@ envs <- paste0("u", 1:jobs)
 
 for(i in 1:jobs){
   ind <- inds[[i]]
-  jobRunScript("testmicro.R", 
+  jobRunScript("job.R", 
                workingDir = ".", 
                importEnv = TRUE, 
                exportEnv = envs[i])
 }
+```
+
+*job.R*
+
+```{r}
+library(dplyr)
+library(lme4)
+library(emmeans)
+library(purrr)
+
+# Fit Model ----
+
+models <- map(g[ind], ~ tryCatch({
+  print(.x)
+  lmer(resid ~ strain + (1|spot:array), filter(normdat, gene == .x))
+  }, error=function(e) cat("ERROR :",conditionMessage(e), "\n"))
+  )
+
+# Pairwise Comparisons ----
+
+pairs <- map(models, ~ tryCatch({
+  emmeans(.x, pairwise ~ strain)$contrasts %>%
+               as_tibble %>%
+               mutate(contrast = as.character(contrast))
+  }, error=function(e) cat("ERROR :",conditionMessage(e), "\n"))
+  )
+
+# Collect Results ----
+
+pvals <- tryCatch({
+  bind_rows(pairs)
+}, error=function(e) cat("ERROR :",conditionMessage(e), "\n")
+)
 ```
