@@ -8,7 +8,7 @@ normdat <- readRDS("data/microarray.rds")
 
 g <- normdat %>% distinct(gene) %>% pull
 n <- length(g)
-n <- 300 # for faster running jobs
+n <- 900 # for shorter running jobs
 
 # Run Jobs ----
 
@@ -18,7 +18,7 @@ envs <- paste0("u", 1:jobs)
 
 for(i in 1:jobs){
   ind <- inds[[i]]
-  jobRunScript("simple_job.R", 
+  jobRunScript("localjob.R", 
                workingDir = ".", 
                importEnv = TRUE, 
                exportEnv = envs[i])
