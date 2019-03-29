@@ -2,7 +2,7 @@ library(dplyr)
 library(purrr)
 library(lme4)
 
-normdat <- readRDS("~/data/microarray.rds")
+normdat <- readRDS("~/microarray/data/microarray.rds")
 g <- normdat %>% distinct(gene) %>% pull
 
 ngenes <- as.numeric(Sys.getenv("ngenes"))

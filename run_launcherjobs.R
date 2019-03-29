@@ -5,7 +5,7 @@ library(DT)
 source("~/microarray/R/launcher_job.R")
 
 njobs <- 3
-ngenes <- readRDS("~/data/microarray.rds") %>% distinct(gene) %>% tally %>% pull
+ngenes <- readRDS("~/microarray/data/microarray.rds") %>% distinct(gene) %>% tally %>% pull
 ngenes <- 900 # for shorter running jobs
 
 env <- function(file, ngenes, njobs, job){
@@ -21,20 +21,10 @@ env <- function(file, ngenes, njobs, job){
 
 map(1:njobs, ~ launcher_job(
   env(
-    file = "~/microarray/launcherjob.R",
+    file = "~/microarray/task_launcher.R",
     ngenes = ngenes,
     njobs = njobs,
     job = .x
     )
 ))
 
-
-# Collect Results ----
-
-outfile <- function(x) paste0("~/microarray/data/env", x, ".rds")
-metrics <- map_df(1:njobs, ~ readRDS(outfile(.x))) %>%
-  arrange(logLik)
-
-# Summarize ----
-
-datatable(metrics)

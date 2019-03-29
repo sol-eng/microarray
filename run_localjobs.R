@@ -18,7 +18,7 @@ envs <- paste0("u", 1:jobs)
 
 for(i in 1:jobs){
   ind <- inds[[i]]
-  jobRunScript("localjob.R", 
+  jobRunScript("task_local.R", 
                workingDir = ".", 
                importEnv = TRUE, 
                exportEnv = envs[i])
