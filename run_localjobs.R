@@ -8,7 +8,7 @@ normdat <- readRDS("data/microarray.rds")
 
 g <- normdat %>% distinct(gene) %>% pull
 n <- length(g)
-n <- 900 # for shorter running jobs
+n <- 300 # for shorter running jobs
 
 # Run Jobs ----
 
@@ -23,14 +23,3 @@ for(i in 1:jobs){
                importEnv = TRUE, 
                exportEnv = envs[i])
 }
-
-# Collect Results ----
-
-metrics <- mget(paste0(envs)) %>%
-  map("metrics") %>%
-  bind_rows %>%
-  arrange(logLik)
-
-# Summarize ----
-
-datatable(metrics)

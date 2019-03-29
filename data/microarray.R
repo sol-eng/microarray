@@ -44,4 +44,4 @@ normdat <- moddat %>%
   mutate(resid = resid(m1)) %>%
   filter(!gene %in% c("EMPTY", "NORF", NA))
 
-saveRDS(normdat, "microarray.rds")
+saveRDS(normdat, "data/microarray.rds")
