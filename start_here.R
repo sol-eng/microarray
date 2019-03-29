@@ -1,5 +1,5 @@
 ##############################################
-# Run interactive session - blocks session
+# Run interactive (i.e. blocking) session
 ##############################################
 
 # Run
@@ -13,7 +13,7 @@ map(models, ~ data.frame(logLik = logLik(.x), BIC = BIC(.x), AIC = AIC(.x))) %>%
   datatable
 
 ##############################################
-# Run local jobs - depends on current session
+# Run local jobs
 ##############################################
 
 # Run
@@ -27,7 +27,7 @@ mget(paste0(envs)) %>%
   datatable
 
 ##############################################
-# Run launcher jobs - runs independently
+# Run launcher jobs
 ##############################################
 
 # Run
